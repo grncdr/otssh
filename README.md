@@ -23,7 +23,7 @@ This is a **bounty repo**. I would like this tool to exist, and I might even wri
 ### Requirements
 
 1. Any language is fine, but the code must build into a single self-contained binary that runs on linux-amd64.
-2. The implementation must implement the command line options and process lifecycle described below. Stylistic differences (e.g. `--flag` instead of `-flag`) are acceptable.
+2. The code must implement the command line options, process lifecycle, and error reporting described below. Stylistic differences (e.g. `--flag` instead of `-flag`) are fine.
 
 ## Command line options
 
@@ -31,7 +31,7 @@ This is a **bounty repo**. I would like this tool to exist, and I might even wri
 
 **Required** must be in the `authorized_keys` format used by OpenSSH. Use `-` for stdin.
 
-### -port=N
+### -port=\<n>
 
 Listen on the specified port number. Defaults to `2022`.
 
@@ -43,22 +43,30 @@ If provided, write all input and output to the given file, creating a transcript
 
 If provided, the given command will be executed with a single argument, which will be the public key of the server in a format suitable for appending to an OpenSSH `known_hosts` file. For example: `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPbnqQ/SGC/OWnL4cQGxlZcFxxfCVx0mD+1MlF/Zdidu`.
 
+### -timeout=\<seconds>
+
+If no successful happens with this time, print an error to stderr and exit with a zero status code. Default is 600 (10 minutes).
+
 ## Process lifecycle
 
 When you run `otssh` it goes through the following steps.
 
-1. Load authorized keys into memory.
-2. Copies all current environment variables.
-3. Generate a new ed25519 keypair and prints the public key to STDOUT in the same format as `--announce`.
+1. Loads authorized keys into memory.
+2. Copies all environment variables.
+3. Generates a new ed25519 keypair and prints the public key to STDOUT in the same format as `--announce`.
 5. Opens the listening TCP socket.
-4. Announce the public key and port. (see the `--announce` documentation above).
+4. Announces the public key and port. (see the `--announce` documentation above).
 6. Accepts a connection on that socket.
-7. Authenticate the connection using the provided authorized keys.
-8. Does not accept any new connections.
-8. Start a shell subprocess using the current value of `$SHELL`, forwarding the current environment, and input/output streams connected to the socket.
-9. Wait for shell to exit.
-10. Closes the port.
-11. Exits with the exit code from step 9.
+7. Authenticates the connection using the provided authorized keys.
+8. If authentication fails, closes the connection and returns to step 6.
+9. Starts a login shell subprocess connected to the socket, using the current value of `$SHELL` with the full copied environment.
+10. Waits for shell to exit.
+11. Closes the port.
+12. Exits with the exit code from step 9.
+
+### Timeout
+
+If no authenticated session begins before the global timeout the socket is torn down and the process exits succesfully.
 
 ## Errors
 
@@ -91,4 +99,4 @@ Reported when the remote side terminates the connection unexpectedly.
 
 ### Could not write to log file
 
-Reported when the `--log` option is provided and does not refer to a writable destination.
+Reported when the `-log` option is provided and does not refer to a writable destination.
