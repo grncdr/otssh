@@ -25,6 +25,15 @@ This is a **bounty repo**. I would like this tool to exist, and I might even wri
 1. Any language is fine, but the code must build into a single self-contained binary that runs on linux-amd64.
 2. The code must implement the command line options, process lifecycle, and error reporting described below. Stylistic differences (e.g. `--flag` instead of `-flag`) are fine.
 
+## Example use case
+
+When operating services in a managed container environment (e.g. Amazons Fargate) you may not have access to the host system running your container. In particular, it's often not possible to use `docker exec` to run a shell in the same environment that your service runs.
+
+You can of course include or some other small SSH daemon in your image, but managing (and auditing) access to that brings more complexity. The design of `otssh` is such that it does not present any persistent attack service. It can be started on demand, and provide a full audit log of what was done in a particular shell session.
+
+A similar design can be accomplished in very few lines of Ruby, shell scripts, etc. but the reliance on a separate process to terminate the encrypted connection makes auditability cumbersome. Hence the desire for a single-purpose tool.
+
+
 ## Command line options
 
 ### -authorized-keys=\<filename>
@@ -100,3 +109,5 @@ Reported when the remote side terminates the connection unexpectedly.
 ### Could not write to log file
 
 Reported when the `-log` option is provided and does not refer to a writable destination.
+
+
