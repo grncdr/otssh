@@ -110,4 +110,80 @@ Reported when the remote side terminates the connection unexpectedly.
 
 Reported when the `-log` option is provided and does not refer to a writable destination.
 
+## Additional Resources
 
+Here is the Ruby script I currently use in concert with [`tinyssh`](https://tinyssh.org/):
+
+```rb
+require 'socket'
+
+$stdout.sync = true
+
+setup_thread = Thread.new do
+  user_ssh_dir = File.join(Dir.home, '.ssh')
+  Dir.mkdir(user_ssh_dir, 0o700) unless File.exist? user_ssh_dir
+  authorized_keys_path = File.join(user_ssh_dir, 'authorized_keys')
+  File.open(authorized_keys_path, 'w') do |f|
+    f.write(File.read(ENV['AUTHORIZED_KEYS']))
+    f.chmod(0o400)
+  end
+
+  File.open('/etc/profile.d/copyenv.sh', 'a') do |f|
+    ENV.each do |k, v|
+      next if %w[PWD USER].include?(k)
+
+      f.write("export #{k}=\"#{v}\"\n")
+    end
+  end
+end
+
+server_thread = Thread.new do
+  server_keydir = '/etc/tinyssh/sshkeydir'
+  system("tinysshd-makekey #{server_keydir}")
+
+  listener = TCPServer.open(2222)
+
+  setup_thread.join
+
+  puts "Host key: #{`tinysshd-printkey #{server_keydir}`}"
+  puts 'Waiting for connection...'
+  client = listener.accept
+  puts "Connection from #{client.peeraddr(false)}"
+  IO.popen("/usr/sbin/tinysshd #{server_keydir}", 'r+') do |sshd|
+    thr = Thread.new { pump(sshd, client) }
+    pump(client, sshd)
+    thr.join
+  end
+end
+
+def pump(from, to)
+  loop do
+    buffer = begin
+      from.read_nonblock(4096)
+    rescue IO::WaitReadable
+      IO.select([from])
+      retry
+    rescue EOFError
+      to.close_write
+      break
+    end
+
+    while buffer.size.positive?
+      begin
+        wrote = to.write_nonblock(buffer)
+        buffer = buffer[wrote..]
+      rescue IO::WaitWritable
+        IO.select(nil, [to])
+        retry
+      rescue EOFError
+        from.close_read
+        break
+      end
+    end
+  end
+end
+
+server_thread.join
+```
+
+It seems like [this example](https://pkg.go.dev/golang.org/x/crypto/ssh#example-NewServerConn) from the documentation of the `golang.org/x/crypto/ssh` is pretty close to what I want already.
