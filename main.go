@@ -45,6 +45,7 @@ func main() {
 }
 
 func run(c *cli.Context) error {
+	log.Println("Started")
 	authKeysPath := c.String("authorized-keys")
 
 	// Create an io.Reader for the authorized-keys file from either stdin or the
@@ -94,9 +95,8 @@ func run(c *cli.Context) error {
 						"pubkey-fp": ssh.FingerprintSHA256(pubKey),
 					},
 				}, nil
-			} else {
-				fmt.Println("no authorized keys map")
 			}
+			fmt.Println("failed to authenticat %q", c.User())
 			return nil, fmt.Errorf("unknown public key for %q", c.User())
 		},
 	}
