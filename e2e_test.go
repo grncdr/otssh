@@ -10,6 +10,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"strings"
 	"testing"
 
 	"golang.org/x/crypto/ssh"
@@ -100,41 +101,62 @@ func TestAuthorizedKeysEmpty(t *testing.T) {
 	}
 }
 
-func TestUnknownPublicKey(t *testing.T) {
+func generateKeyPair() (*[]byte, *[]byte, error) {
 	private, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
-		t.Fatal(err)
+		return nil, nil, err
 	}
 	public, err := ssh.NewPublicKey(private.Public())
 	if err != nil {
-		t.Fatal(err)
+		return nil, nil, err
 	}
-	filename := "temp_authorized_keys"
 
 	pubkeyBytes := ssh.MarshalAuthorizedKey(public)
-	err = ioutil.WriteFile(filename, pubkeyBytes, 0600)
-	if err != nil {
-		t.Fatalf("failed to create auth keys file: %q", err)
-	}
-	// 
-	identityFilename := "id_temp"
+
 	privateDER := x509.MarshalPKCS1PrivateKey(private)
 	privateKeyPEM := pem.Block{
 		Type:  "RSA PRIVATE KEY",
 		Bytes: privateDER,
 	}
 	privateBytes := pem.EncodeToMemory(&privateKeyPEM)
-	err = ioutil.WriteFile(identityFilename, privateBytes, 0600)
+
+	return &privateBytes, &pubkeyBytes, nil
+}
+
+func TestUnknownPublicKey(t *testing.T) {
+	_, publicBytes, err := generateKeyPair()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	cmd := exec.Command("./otssh", "--authorized-keys", filename)
-	stdout, err := cmd.StdoutPipe()
+	filename := "temp_authorized_keys"
+	err = ioutil.WriteFile(filename, *publicBytes, 0600)
+	if err != nil {
+		t.Fatalf("failed to create auth keys file: %q", err)
+	}
+	// defer func() {
+	// 	os.Remove(filename)
+	// }()
+
+	privateBytes, _, err := generateKeyPair()
 	if err != nil {
 		t.Fatal(err)
 	}
-	stderr, err := cmd.StderrPipe()
+	identityFilename := "id_temp"
+	err = ioutil.WriteFile(identityFilename, *privateBytes, 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		os.Remove(identityFilename)
+	}()
+
+	cmd := exec.Command("./otssh", "--authorized-keys", filename)
+	stdoutPipe, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stderrPipe, err := cmd.StderrPipe()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,12 +168,17 @@ func TestUnknownPublicKey(t *testing.T) {
 		t.Fatalf("failed to run command: %q\n", err)
 	}
 
-	ssh := exec.Command("ssh", "-T", "-i", identityFilename, "-p", "2023", "127.0.0.1")
-	sshStdout, err := ssh.StdoutPipe()
+	ssh := exec.Command(
+		"ssh", "-T", "-i", identityFilename,
+		"-o", "StrictHostKeyChecking=no", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
+		"-p", "2023", "127.0.0.1",
+	)
+
+	sshStdoutPipe, err := ssh.StdoutPipe()
 	if err != nil {
 		t.Fatal(err)
 	}
-	sshStderr, err := ssh.StderrPipe()
+	sshStderrPipe, err := ssh.StderrPipe()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -163,27 +190,45 @@ func TestUnknownPublicKey(t *testing.T) {
 	}
 
 	fmt.Println("piping ssh")
-	_, err = io.Copy(os.Stdout, sshStdout)
-	_, err = io.Copy(os.Stderr, sshStderr)
+	sshStdout := new(strings.Builder)
+	_, err = io.Copy(sshStdout, sshStdoutPipe)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	fmt.Println("Going to wait for SSH..")
-
-	if err := ssh.Wait(); err != nil {
+	sshStderr := new(strings.Builder)
+	_, err = io.Copy(sshStderr, sshStderrPipe)
+	if err != nil {
 		t.Fatal(err)
 	}
 
-	fmt.Println("piping output")
-	_, err = io.Copy(os.Stdout, stdout)
-	_, err = io.Copy(os.Stderr, stderr)
+	sshErr := ssh.Wait()
+	if sshErr == nil {
+		t.Fatal("Expected SSH to exit unsuccessfully")
+	}
 
+	_, err = io.Copy(os.Stdout, stdoutPipe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = io.Copy(os.Stderr, stderrPipe)
+	if err != nil {
+		t.Fatal(err)
+	}
 	fmt.Println("done piping")
 
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	cmd.Process.Kill()
+	if sshErr != nil {
+		cmd.Process.Kill()
+		expected := "Permission denied (publickey)"
+		if !strings.Contains(sshStderr.String(), expected) {
+			t.Fatalf("Expected %s, got %s", expected, sshStderr.String())
+		}
+		fmt.Println("sshStder")
+		fmt.Println(sshStderr)
+		fmt.Println(sshStdout)
+	}
 }
