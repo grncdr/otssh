@@ -117,7 +117,7 @@ func run(c *cli.Context) error {
 	privatePEMBytes := pem.EncodeToMemory(&privatePEM)
 	private, err := ssh.ParsePrivateKey(privatePEMBytes)
 	if err != nil {
-		return fmt.Errorff("Failed to parse host private key: %v", err)
+		return fmt.Errorf("Failed to parse host private key: %v", err)
 	}
 
 	config.AddHostKey(private)
@@ -132,14 +132,14 @@ func run(c *cli.Context) error {
 
 	nConn, err := listener.Accept()
 	if err != nil {
-		return fmt.Errorf("failed to accept incoming connection: %q", err)
+		return fmt.Errorf("Failed to accept incoming connection: %q", err)
 	}
 
 	// Before use, a handshake must be performed on the incoming
 	// net.Conn.
 	conn, chans, reqs, err := ssh.NewServerConn(nConn, config)
 	if err != nil {
-		return fmt.Errorf("failed to perform SSH handshake: %q", err)
+		return fmt.Errorf("Failed to perform SSH handshake: %q", err)
 	}
 	log.Printf("logged in with key %s", conn.Permissions.Extensions["pubkey-fp"])
 
