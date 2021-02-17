@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"strings"
 	"testing"
+	"net"
 
 	"golang.org/x/crypto/ssh"
 
@@ -134,9 +135,9 @@ func TestUnknownPublicKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create auth keys file: %q", err)
 	}
-	// defer func() {
-	// 	os.Remove(filename)
-	// }()
+	defer func() {
+		os.Remove(filename)
+	}()
 
 	privateBytes, _, err := generateKeyPair()
 	if err != nil {
@@ -171,7 +172,7 @@ func TestUnknownPublicKey(t *testing.T) {
 	ssh := exec.Command(
 		"ssh", "-T", "-i", identityFilename,
 		"-o", "StrictHostKeyChecking=no", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
-		"-p", "2023", "127.0.0.1",
+		"-p", "2022", "127.0.0.1",
 	)
 
 	sshStdoutPipe, err := ssh.StdoutPipe()
@@ -230,5 +231,33 @@ func TestUnknownPublicKey(t *testing.T) {
 		fmt.Println("sshStder")
 		fmt.Println(sshStderr)
 		fmt.Println(sshStdout)
+	}
+}
+
+func TestCannotBindPort(t *testing.T) {
+	_, publicBytes, err := generateKeyPair()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	filename := "temp_authorized_keys"
+	err = ioutil.WriteFile(filename, *publicBytes, 0600)
+	if err != nil {
+		t.Fatalf("failed to create auth keys file: %q", err)
+	}
+	defer func() {
+		os.Remove(filename)
+	}()
+
+	conn, err := net.Listen("tcp", "0.0.0.0:1234")
+	if err != nil {
+		t.Fatal("cound not bind to port")
+	}
+
+	defer conn.Close()
+
+	testcli.Run("./otssh", "--authorized-keys", filename, "--port", "1234")
+	if !testcli.StderrContains("could not bind to port") {
+		t.Fatalf("expected could not bind to port, got %q", testcli.Stderr())
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/ed25519"
+	"crypto/rand"
 	"encoding/binary"
 	"encoding/pem"
 	"errors"
@@ -31,6 +32,11 @@ func main() {
 				Usage:    "location of authorized-keys file",
 				Required: true,
 			},
+			&cli.IntFlag{
+				Name:  "port",
+				Value: 2022,
+				Usage: "Port to bind to",
+			},
 		},
 		Name:   "otssh",
 		Usage:  "make one time only SSH session",
@@ -47,6 +53,7 @@ func main() {
 func run(c *cli.Context) error {
 	log.Println("Started")
 	authKeysPath := c.String("authorized-keys")
+	port := c.Int("port")
 
 	// Create an io.Reader for the authorized-keys file from either stdin or the
 	// file path.
@@ -85,9 +92,6 @@ func run(c *cli.Context) error {
 	// certificate details and handles authentication of ServerConns
 	config := &ssh.ServerConfig{
 		PublicKeyCallback: func(c ssh.ConnMetadata, pubKey ssh.PublicKey) (*ssh.Permissions, error) {
-			fmt.Println("authkeysMap")
-			fmt.Println(authorizedKeysMap)
-			fmt.Printf("looking for %v", pubKey.Marshal())
 			if authorizedKeysMap[string(pubKey.Marshal())] {
 				// Record the fingerprint of the public key used for authentication
 				return &ssh.Permissions{
@@ -96,14 +100,13 @@ func run(c *cli.Context) error {
 					},
 				}, nil
 			}
-			fmt.Println("failed to authenticat %q", c.User())
 			return nil, fmt.Errorf("unknown public key for %q", c.User())
 		},
 	}
 
-	_, privateBytes, err := ed25519.GenerateKey(nil) // replace with rand
+	_, privateBytes, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
-		return errors.New(fmt.Sprintf("Failed to generate host key: %v", err))
+		return fmt.Errorf("Failed to generate host key: %v", err)
 	}
 
 	// crypto.Signer has a Public method, while ssh.Signer has
@@ -115,20 +118,22 @@ func run(c *cli.Context) error {
 	privatePEMBytes := pem.EncodeToMemory(&privatePEM)
 	private, err := ssh.ParsePrivateKey(privatePEMBytes)
 	if err != nil {
-		return errors.New(fmt.Sprintf("Failed to parse host private key: %v", err))
+		return fmt.Errorff("Failed to parse host private key: %v", err)
 	}
 
 	config.AddHostKey(private)
 
 	// Once a ServerConfig has been configured, connections can be
 	// accepted.
-	listener, err := net.Listen("tcp", "0.0.0.0:2023")
+	address := fmt.Sprintf("0.0.0.0:%d", port)
+	listener, err := net.Listen("tcp", address)
 	if err != nil {
-		log.Fatal("failed to listen for connection: ", err)
+		return fmt.Errorf("Could not bind to port %d", port)
 	}
+
 	nConn, err := listener.Accept()
 	if err != nil {
-		log.Fatal("failed to accept incoming connection: ", err)
+		log.Fatalf("failed to accept incoming connection: %q", err)
 	}
 
 	// Before use, a handshake must be performed on the incoming
@@ -169,7 +174,7 @@ func run(c *cli.Context) error {
 		}
 
 		// Allocate a terminal
-		log.Print("Creating pty...")
+		log.Println("Creating pty...")
 		shellf, err := pty.Start(shell)
 		if err != nil {
 			log.Printf("Could not start pty (%s)", err)
