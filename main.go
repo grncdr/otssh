@@ -66,11 +66,11 @@ func run(c *cli.Context) error {
 		f, err := os.Open(authKeysPath)
 		if err != nil {
 			if errors.Is(err, os.ErrPermission) {
-				return errors.New(fmt.Sprintf("authorization key invalid: %s is not readable", authKeysPath))
+				return fmt.Errorf("authorization key invalid: %s is not readable", authKeysPath)
 			} else if errors.Is(err, os.ErrNotExist) {
-				return errors.New(fmt.Sprintf("authorization key invalid: %s does not exist", authKeysPath))
+				return fmt.Errorf("authorization key invalid: %s does not exist", authKeysPath)
 			} else {
-				return errors.New(fmt.Sprintf("authorization key invalid: failed to open %s: %v", authKeysPath, err))
+				return fmt.Errorf("authorization key invalid: failed to open %s: %v", authKeysPath, err)
 			}
 		}
 
@@ -81,10 +81,9 @@ func run(c *cli.Context) error {
 	authorizedKeysMap, err := readAuthKeys(authKeysReader)
 	if err != nil {
 		if authKeysPath == "-" {
-			return errors.New(fmt.Sprintf("authorization keys invalid: stdin %v", err))
-		} else {
-			return errors.New(fmt.Sprintf("authorization keys invalid: %s %v", authKeysPath, err))
+			return fmt.Errorf("authorization keys invalid: stdin %v", err)
 		}
+		return fmt.Errorf("authorization keys invalid: %s %v", authKeysPath, err)
 	}
 	log.Printf("Found %v keys in authorized-keys file", len(authorizedKeysMap))
 
@@ -100,7 +99,7 @@ func run(c *cli.Context) error {
 					},
 				}, nil
 			}
-			return nil, fmt.Errorf("unknown public key for %q", c.User())
+			return nil, fmt.Errorf("Unknown public key for %q", c.User())
 		},
 	}
 
@@ -133,14 +132,14 @@ func run(c *cli.Context) error {
 
 	nConn, err := listener.Accept()
 	if err != nil {
-		log.Fatalf("failed to accept incoming connection: %q", err)
+		return fmt.Errorf("failed to accept incoming connection: %q", err)
 	}
 
 	// Before use, a handshake must be performed on the incoming
 	// net.Conn.
 	conn, chans, reqs, err := ssh.NewServerConn(nConn, config)
 	if err != nil {
-		log.Fatal("failed to handshake: ", err)
+		return fmt.Errorf("failed to perform SSH handshake: %q", err)
 	}
 	log.Printf("logged in with key %s", conn.Permissions.Extensions["pubkey-fp"])
 
