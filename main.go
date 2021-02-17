@@ -161,7 +161,7 @@ func run(c *cli.Context) error {
 			log.Fatalf("Could not accept channel: %v", err)
 		}
 
-		shell := exec.Command("bash")
+		shell := exec.Command(os.Getenv("SHELL"))
 
 		close := func() {
 			channel.Close()
