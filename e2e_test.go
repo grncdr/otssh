@@ -6,17 +6,14 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
-	"io"
 	"io/ioutil"
-	"os"
-	"os/exec"
-	"strings"
-	"testing"
 	"net"
+	"os"
+	"testing"
 
 	"golang.org/x/crypto/ssh"
 
-	"github.com/rendon/testcli"
+	"github.com/gerbyzation/testcli"
 )
 
 func TestRaisesErrorForMissingAuthKeysFile(t *testing.T) {
@@ -152,85 +149,25 @@ func TestUnknownPublicKey(t *testing.T) {
 		os.Remove(identityFilename)
 	}()
 
-	cmd := exec.Command("./otssh", "--authorized-keys", filename)
-	stdoutPipe, err := cmd.StdoutPipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	stderrPipe, err := cmd.StderrPipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	fmt.Println("starting process")
-
-	err = cmd.Start()
+	cmd := testcli.Command("./otssh", "--authorized-keys", filename)
+	cmd.Start()
 	if err != nil {
 		t.Fatalf("failed to run command: %q\n", err)
 	}
 
-	ssh := exec.Command(
+	ssh := testcli.Command(
 		"ssh", "-T", "-i", identityFilename,
 		"-o", "StrictHostKeyChecking=no", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
 		"-p", "2022", "127.0.0.1",
 	)
 
-	sshStdoutPipe, err := ssh.StdoutPipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	sshStderrPipe, err := ssh.StderrPipe()
-	if err != nil {
-		t.Fatal(err)
-	}
+	ssh.Start()
+	ssh.Wait()
 
-	fmt.Println("starting ssh")
-	err = ssh.Start()
-	if err != nil {
-		t.Fatalf("failed to run ssh: %q\n", err)
-	}
-
-	fmt.Println("piping ssh")
-	sshStdout := new(strings.Builder)
-	_, err = io.Copy(sshStdout, sshStdoutPipe)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	sshStderr := new(strings.Builder)
-	_, err = io.Copy(sshStderr, sshStderrPipe)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	sshErr := ssh.Wait()
-	if sshErr == nil {
-		t.Fatal("Expected SSH to exit unsuccessfully")
-	}
-
-	_, err = io.Copy(os.Stdout, stdoutPipe)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = io.Copy(os.Stderr, stderrPipe)
-	if err != nil {
-		t.Fatal(err)
-	}
-	fmt.Println("done piping")
-
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if sshErr != nil {
-		cmd.Process.Kill()
-		expected := "Permission denied (publickey)"
-		if !strings.Contains(sshStderr.String(), expected) {
-			t.Fatalf("Expected %s, got %s", expected, sshStderr.String())
-		}
-		fmt.Println("sshStder")
-		fmt.Println(sshStderr)
-		fmt.Println(sshStdout)
+	cmd.Kill()
+	expected := "Permission denied (publickey)"
+	if !ssh.StderrContains(expected) {
+		t.Fatalf("Expected %s, got %s", expected, ssh.Stdout())
 	}
 }
 

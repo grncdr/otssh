@@ -131,6 +131,7 @@ func run(c *cli.Context) error {
 	}
 
 	nConn, err := listener.Accept()
+	defer listener.Close()
 	if err != nil {
 		return fmt.Errorf("Failed to accept incoming connection: %q", err)
 	}
