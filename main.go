@@ -130,19 +130,26 @@ func run(c *cli.Context) error {
 		return fmt.Errorf("Could not bind to port %d", port)
 	}
 
-	nConn, err := listener.Accept()
-	defer listener.Close()
-	if err != nil {
-		return fmt.Errorf("Failed to accept incoming connection: %q", err)
-	}
+	var conn *ssh.ServerConn
+	var chans <-chan ssh.NewChannel
+	var reqs <-chan *ssh.Request
+	for (conn == nil) {
+		nConn, err := listener.Accept()
+		defer listener.Close()
+		if err != nil {
+			return fmt.Errorf("Failed to accept incoming connection: %q", err)
+		}
 
-	// Before use, a handshake must be performed on the incoming
-	// net.Conn.
-	conn, chans, reqs, err := ssh.NewServerConn(nConn, config)
-	if err != nil {
-		return fmt.Errorf("Failed to perform SSH handshake: %q", err)
+		// Before use, a handshake must be performed on the incoming
+		// net.Conn.
+		conn, chans, reqs, err = ssh.NewServerConn(nConn, config)
+		if err != nil {
+			log.Printf("Failed to perform SSH handshake: %q", err)
+			log.Println("Waiting for new connection...")
+		} else {
+			log.Printf("logged in with key %s", conn.Permissions.Extensions["pubkey-fp"])
+		}
 	}
-	log.Printf("logged in with key %s", conn.Permissions.Extensions["pubkey-fp"])
 
 	// The incoming Request channel must be serviced.
 	go ssh.DiscardRequests(reqs)

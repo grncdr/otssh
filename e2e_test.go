@@ -178,6 +178,36 @@ func TestUnknownPublicKey(t *testing.T) {
 	}
 }
 
+func TestBindsToPortArgument(t *testing.T) {
+	privateKeyFile, publicKeyFile, err := generateKeyPair()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(privateKeyFile.Name())
+	defer os.Remove(publicKeyFile.Name())
+
+	cmd := testcli.Command("./otssh", "--authorized-keys", publicKeyFile.Name(), "--port", "1234")
+	cmd.Start()
+
+	ssh := testcli.Command(
+		"ssh", "-T", "-i", privateKeyFile.Name(),
+		"-o", "StrictHostKeyChecking=no", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
+		"-p", "1234", "127.0.0.1", "date",
+	)
+
+	ssh.Run()
+	cmd.Kill()
+
+	expected := "logged in with key"
+	// This should be on stdout, not stderr?
+	// In addition we should be able to test this on the ssh command, but it seems it
+	// doesn't properly handle commands from non-interactive sessions correctly?
+	if !cmd.StderrContains(expected) {
+		t.Fatalf("exptected otssh output to contain %q, got %q", expected, cmd.Stderr())
+
+	}
+}
+ 
 func TestCannotBindPort(t *testing.T) {
 	_, publicKeyFile, err := generateKeyPair()
 	defer os.Remove(publicKeyFile.Name())
@@ -193,4 +223,61 @@ func TestCannotBindPort(t *testing.T) {
 	if !testcli.StderrContains("could not bind to port") {
 		t.Fatalf("expected could not bind to port, got %q", testcli.Stderr())
 	}
+}
+
+func TestConnectionOpenUntilSuccessfullHandshake(t *testing.T) {
+	privateKeyFile, publicKeyFile, err := generateKeyPair()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(privateKeyFile.Name())
+	defer os.Remove(publicKeyFile.Name())
+
+	badPrivateKeyFile, unusedPubKey, err := generateKeyPair()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(badPrivateKeyFile.Name())
+	defer os.Remove(unusedPubKey.Name())
+
+	cmd := testcli.Command("./otssh", "--authorized-keys", publicKeyFile.Name(), "--port", "1234")
+	cmd.Start()
+
+	testcli.Run(
+		"ssh", "-T", "-i", badPrivateKeyFile.Name(),
+		"-o", "StrictHostKeyChecking=no", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
+		"-p", "1234", "127.0.0.1",
+	)
+
+	expected := "Failed to perform SSH handshake"
+	if !cmd.StderrContains(expected) {
+		t.Fatalf("expected %q, got %q", expected, cmd.Stderr())
+	}
+	
+
+	ssh := testcli.Command(
+		"ssh", "-T", "-i", privateKeyFile.Name(),
+		"-o", "StrictHostKeyChecking=no", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
+		"-p", "1234", "127.0.0.1",
+	)
+
+	ssh.Run()
+
+	expected = "logged in with key"
+	if !cmd.StderrContains(expected) {
+		t.Fatalf("wanted %q, got %q", expected, cmd.Stderr())
+	}
+
+	// After accepting a connection all other connections should be refused
+	connectionDenied := testcli.Command(
+		"ssh", "-T", "-i", badPrivateKeyFile.Name(),
+		"-o", "StrictHostKeyChecking=no", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
+		"-p", "1234", "127.0.0.1",
+	)
+	connectionDenied.Run()
+	expected = "connection refused"
+	if !connectionDenied.StderrContains(expected) {
+		t.Fatalf("exptected %q, got %q", expected, connectionDenied.Stderr())
+	}
+	cmd.Kill()
 }
