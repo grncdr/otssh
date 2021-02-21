@@ -99,7 +99,7 @@ func TestAuthorizedKeysEmpty(t *testing.T) {
 	}
 }
 
-func generateKeyPair() (*[]byte, *[]byte, error) {
+func generateKeyPair() (*os.File, *os.File, error) {
 	private, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		return nil, nil, err
@@ -118,45 +118,52 @@ func generateKeyPair() (*[]byte, *[]byte, error) {
 	}
 	privateBytes := pem.EncodeToMemory(&privateKeyPEM)
 
-	return &privateBytes, &pubkeyBytes, nil
+	authKeysFile, err := ioutil.TempFile("./", "authorized_keys.*")
+	if err != nil {
+		return nil, nil, err
+	}
+	_, err = authKeysFile.Write(pubkeyBytes)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	idFile, err := ioutil.TempFile("./", "id_temp.*")
+	if err != nil {
+		return nil, nil, err
+	}
+	err = os.Chmod(authKeysFile.Name(), 0600)
+	if err != nil {
+		return nil, nil, err
+	}
+	_, err = idFile.Write(privateBytes)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return idFile, authKeysFile, nil
 }
 
 func TestUnknownPublicKey(t *testing.T) {
-	_, publicBytes, err := generateKeyPair()
+	privateKeyFile, _, err := generateKeyPair()
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer os.Remove(privateKeyFile.Name())
 
-	filename := "temp_authorized_keys"
-	err = ioutil.WriteFile(filename, *publicBytes, 0600)
-	if err != nil {
-		t.Fatalf("failed to create auth keys file: %q", err)
-	}
-	defer func() {
-		os.Remove(filename)
-	}()
-
-	privateBytes, _, err := generateKeyPair()
+	_, publicKeyFile, err := generateKeyPair()
 	if err != nil {
 		t.Fatal(err)
 	}
-	identityFilename := "id_temp"
-	err = ioutil.WriteFile(identityFilename, *privateBytes, 0600)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		os.Remove(identityFilename)
-	}()
+	defer os.Remove(publicKeyFile.Name())
 
-	cmd := testcli.Command("./otssh", "--authorized-keys", filename)
+	cmd := testcli.Command("./otssh", "--authorized-keys", publicKeyFile.Name())
 	cmd.Start()
 	if err != nil {
 		t.Fatalf("failed to run command: %q\n", err)
 	}
 
 	ssh := testcli.Command(
-		"ssh", "-T", "-i", identityFilename,
+		"ssh", "-T", "-i", privateKeyFile.Name(),
 		"-o", "StrictHostKeyChecking=no", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
 		"-p", "2022", "127.0.0.1",
 	)
@@ -172,19 +179,8 @@ func TestUnknownPublicKey(t *testing.T) {
 }
 
 func TestCannotBindPort(t *testing.T) {
-	_, publicBytes, err := generateKeyPair()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	filename := "temp_authorized_keys"
-	err = ioutil.WriteFile(filename, *publicBytes, 0600)
-	if err != nil {
-		t.Fatalf("failed to create auth keys file: %q", err)
-	}
-	defer func() {
-		os.Remove(filename)
-	}()
+	_, publicKeyFile, err := generateKeyPair()
+	defer os.Remove(publicKeyFile.Name())
 
 	conn, err := net.Listen("tcp", "0.0.0.0:1234")
 	if err != nil {
@@ -193,7 +189,7 @@ func TestCannotBindPort(t *testing.T) {
 
 	defer conn.Close()
 
-	testcli.Run("./otssh", "--authorized-keys", filename, "--port", "1234")
+	testcli.Run("./otssh", "--authorized-keys", publicKeyFile.Name(), "--port", "1234")
 	if !testcli.StderrContains("could not bind to port") {
 		t.Fatalf("expected could not bind to port, got %q", testcli.Stderr())
 	}
