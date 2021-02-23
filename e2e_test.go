@@ -99,14 +99,14 @@ func TestAuthorizedKeysEmpty(t *testing.T) {
 	}
 }
 
-func generateKeyPair() (*os.File, *os.File, error) {
+func generateKeyPair() (*os.File, *os.File, func(), error) {
 	private, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	public, err := ssh.NewPublicKey(private.Public())
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	pubkeyBytes := ssh.MarshalAuthorizedKey(public)
@@ -118,43 +118,48 @@ func generateKeyPair() (*os.File, *os.File, error) {
 	}
 	privateBytes := pem.EncodeToMemory(&privateKeyPEM)
 
-	authKeysFile, err := ioutil.TempFile("./", "authorized_keys.*")
+	publicKeyFile, err := ioutil.TempFile("./", "id_temp.*.pub")
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	_, err = authKeysFile.Write(pubkeyBytes)
+	_, err = publicKeyFile.Write(pubkeyBytes)
 	if err != nil {
-		return nil, nil, err
-	}
-
-	idFile, err := ioutil.TempFile("./", "id_temp.*")
-	if err != nil {
-		return nil, nil, err
-	}
-	err = os.Chmod(authKeysFile.Name(), 0600)
-	if err != nil {
-		return nil, nil, err
-	}
-	_, err = idFile.Write(privateBytes)
-	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
-	return idFile, authKeysFile, nil
+	privateKeyFile, err := ioutil.TempFile("./", "id_temp.*")
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	err = os.Chmod(privateKeyFile.Name(), 0600)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	_, err = privateKeyFile.Write(privateBytes)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	cleanup := func() {
+		os.Remove(publicKeyFile.Name())
+		os.Remove(privateKeyFile.Name())
+	}
+
+	return privateKeyFile, publicKeyFile, cleanup, nil
 }
 
 func TestUnknownPublicKey(t *testing.T) {
-	privateKeyFile, _, err := generateKeyPair()
+	privateKeyFile, _, cleanup, err := generateKeyPair()
+	defer cleanup()
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove(privateKeyFile.Name())
 
-	_, publicKeyFile, err := generateKeyPair()
+	_, publicKeyFile, cleanup, err := generateKeyPair()
+	defer cleanup()
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove(publicKeyFile.Name())
 
 	cmd := testcli.Command("./otssh", "--authorized-keys", publicKeyFile.Name())
 	cmd.Start()
@@ -179,12 +184,11 @@ func TestUnknownPublicKey(t *testing.T) {
 }
 
 func TestBindsToPortArgument(t *testing.T) {
-	privateKeyFile, publicKeyFile, err := generateKeyPair()
+	privateKeyFile, publicKeyFile, cleanup, err := generateKeyPair()
+	defer cleanup()
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove(privateKeyFile.Name())
-	defer os.Remove(publicKeyFile.Name())
 
 	cmd := testcli.Command("./otssh", "--authorized-keys", publicKeyFile.Name(), "--port", "1234")
 	cmd.Start()
@@ -207,10 +211,10 @@ func TestBindsToPortArgument(t *testing.T) {
 
 	}
 }
- 
+
 func TestCannotBindPort(t *testing.T) {
-	_, publicKeyFile, err := generateKeyPair()
-	defer os.Remove(publicKeyFile.Name())
+	_, publicKeyFile, cleanup, err := generateKeyPair()
+	defer cleanup()
 
 	conn, err := net.Listen("tcp", "0.0.0.0:1234")
 	if err != nil {
@@ -226,19 +230,17 @@ func TestCannotBindPort(t *testing.T) {
 }
 
 func TestConnectionOpenUntilSuccessfullHandshake(t *testing.T) {
-	privateKeyFile, publicKeyFile, err := generateKeyPair()
+	privateKeyFile, publicKeyFile, cleanup, err := generateKeyPair()
+	defer cleanup()
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove(privateKeyFile.Name())
-	defer os.Remove(publicKeyFile.Name())
 
-	badPrivateKeyFile, unusedPubKey, err := generateKeyPair()
+	badPrivateKeyFile, _, cleanup, err := generateKeyPair()
+	defer cleanup()
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove(badPrivateKeyFile.Name())
-	defer os.Remove(unusedPubKey.Name())
 
 	cmd := testcli.Command("./otssh", "--authorized-keys", publicKeyFile.Name(), "--port", "1234")
 	cmd.Start()
@@ -253,7 +255,6 @@ func TestConnectionOpenUntilSuccessfullHandshake(t *testing.T) {
 	if !cmd.StderrContains(expected) {
 		t.Fatalf("expected %q, got %q", expected, cmd.Stderr())
 	}
-	
 
 	ssh := testcli.Command(
 		"ssh", "-T", "-i", privateKeyFile.Name(),
