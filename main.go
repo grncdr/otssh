@@ -108,8 +108,6 @@ func run(c *cli.Context) error {
 		return fmt.Errorf("Failed to generate host key: %v", err)
 	}
 
-	// crypto.Signer has a Public method, while ssh.Signer has
-	// PublicKey...🤷🏻‍♂️
 	privatePEM := pem.Block{
 		Type:  "OPENSSH PRIVATE KEY",
 		Bytes: edkey.MarshalED25519PrivateKey(privateBytes),
@@ -130,10 +128,13 @@ func run(c *cli.Context) error {
 		return fmt.Errorf("Could not bind to port %d", port)
 	}
 
-	var conn *ssh.ServerConn
-	var chans <-chan ssh.NewChannel
-	var reqs <-chan *ssh.Request
-	for (conn == nil) {
+	var (
+		conn  *ssh.ServerConn
+		chans <-chan ssh.NewChannel
+		reqs  <-chan *ssh.Request
+	)
+
+	for conn == nil {
 		nConn, err := listener.Accept()
 		defer listener.Close()
 		if err != nil {
@@ -165,40 +166,16 @@ func run(c *cli.Context) error {
 			continue
 		}
 		channel, requests, err := newChannel.Accept()
+
 		if err != nil {
 			log.Fatalf("Could not accept channel: %v", err)
 		}
 
-		shell := exec.Command(os.Getenv("SHELL"))
-
-		close := func() {
-			channel.Close()
-			_, err := shell.Process.Wait()
-			if err != nil {
-				log.Printf("Failed to exit shell(%s)", err)
-			}
-			log.Printf("Session closed")
-		}
-
-		// Allocate a terminal
-		log.Println("Creating pty...")
-		shellf, err := pty.Start(shell)
-		if err != nil {
-			log.Printf("Could not start pty (%s)", err)
-			close()
-			return nil
-		}
-
-		// pipe session to bash and visa-versa
-		var once sync.Once
-		go func() {
-			io.Copy(io.MultiWriter(channel, os.Stdout), shellf)
-			once.Do(close)
-		}()
-		go func() {
-			io.Copy(shellf, channel)
-			once.Do(close)
-		}()
+		var (
+			ptyWinSize *pty.Winsize
+			ptyFd      *os.File
+			envVars    []string = []string{}
+		)
 
 		// Sessions have out-of-band requests such as "shell",
 		// "pty-req" and "env".  Here we handle only the
@@ -207,22 +184,91 @@ func run(c *cli.Context) error {
 			for req := range in {
 				switch req.Type {
 				case "shell":
+					if ptyWinSize != nil {
+						shell := exec.Command("bash")
+
+						close := func() {
+							channel.Close()
+							_, err := shell.Process.Wait()
+							if err != nil {
+								log.Printf("Failed to exit shell(%s)", err)
+							}
+							log.Printf("Session closed")
+						}
+
+						fd, err := pty.StartWithSize(shell, ptyWinSize)
+						if err != nil {
+							log.Printf("Could not start pty (%s)\n", err)
+							close()
+							return
+						}
+
+						var once sync.Once
+						go func() {
+							io.Copy(io.MultiWriter(channel, os.Stdout), fd)
+							once.Do(close)
+						}()
+						go func() {
+							io.Copy(fd, channel)
+							once.Do(close)
+						}()
+					} else {
+						shell := exec.Command("bash")
+						close := func() {
+							channel.Close()
+							_, err := shell.Process.Wait()
+							if err != nil {
+								log.Printf("Failed to exit shell(%s)", err)
+							}
+							log.Printf("Session closed")
+						}
+
+						shell.Stdout = io.MultiWriter(channel, os.Stdout)
+						shell.Stdin = channel
+
+						err := shell.Start()
+						if err != nil {
+							log.Printf("Could not start shell (%s)\n", err)
+							close()
+							return
+						}
+					}
 					// We only accept the default shell
 					// (i.e. no command in the Payload
 					if len(req.Payload) == 0 {
 						req.Reply(true, nil)
 					}
 				case "pty-req":
-					// fmt.Printf("resizing: %+v\n", req)
 					termLen := req.Payload[3]
-					w, h := parseDims(req.Payload[termLen+4:])
-					SetWinsize(shellf.Fd(), w, h)
+					term := string(req.Payload[3 : termLen+4])
+					cols, rows := parseDims(req.Payload[termLen+4:])
+					width, height := parseDims(req.Payload[termLen+12:])
+
+					ptyWinSize = &pty.Winsize{uint16(cols), uint16(rows), uint16(width), uint16(height)}
+					envVars = append(envVars, term)
+
 					// Responding true (OK) here will let the client
 					// know we have a pty ready for input
 					req.Reply(true, nil)
 				case "window-change":
 					w, h := parseDims(req.Payload)
-					SetWinsize(shellf.Fd(), w, h)
+					SetWinsize(ptyFd.Fd(), w, h)
+				case "exec":
+					command := string(req.Payload[4:])
+					shell := exec.Command(command)
+					close := func() {
+						channel.Close()
+						log.Printf("Session closed")
+					}
+
+					shell.Stdout = io.MultiWriter(channel, os.Stdout)
+					err = shell.Run()
+					if err != nil {
+						fmt.Printf("Failed to execute command: %s\n", err)
+					}
+
+					req.Reply(true, nil)
+					close()
 				}
 			}
 		}(requests)
@@ -260,15 +306,15 @@ func parseDims(b []byte) (uint32, uint32) {
 }
 
 // Winsize stores the Height and Width of a terminal.
-type Winsize struct {
-	Height uint16
-	Width  uint16
-	x      uint16 // unused
-	y      uint16 // unused
-}
+// type Winsize struct {
+// 	Height uint16
+// 	Width  uint16
+// 	x      uint16 // unused
+// 	y      uint16 // unused
+// }
 
 // SetWinsize sets the size of the given pty.
 func SetWinsize(fd uintptr, w, h uint32) {
-	ws := &Winsize{Width: uint16(w), Height: uint16(h)}
+	ws := &pty.Winsize{Cols: uint16(w), Rows: uint16(h)}
 	syscall.Syscall(syscall.SYS_IOCTL, fd, uintptr(syscall.TIOCSWINSZ), uintptr(unsafe.Pointer(ws)))
 }
