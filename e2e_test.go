@@ -282,3 +282,27 @@ func TestConnectionOpenUntilSuccessfullHandshake(t *testing.T) {
 	}
 	cmd.Kill()
 }
+
+func TestNonInteractiveExec(t *testing.T) {
+	privateKeyFile, publicKeyFile, cleanup, err := generateKeyPair()
+	defer cleanup()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := testcli.Command("./otssh", "--authorized-keys", publicKeyFile.Name(), "--port", "1234")
+	cmd.Start()
+
+	ssh := testcli.Command(
+		"ssh", "-i", privateKeyFile.Name(),
+		"-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
+		"-p", "1234", "127.0.0.1", "echo", "'hi you'",
+	)
+	ssh.Run()
+	cmd.Kill()
+
+	expected := "hi you"
+	if !cmd.StdoutContains(expected) {
+		t.Fatalf("wanted %q, got %q", expected, cmd.Stderr())
+	}
+}
