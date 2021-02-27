@@ -259,7 +259,7 @@ func TestConnectionOpenUntilSuccessfullHandshake(t *testing.T) {
 	ssh := testcli.Command(
 		"ssh", "-T", "-i", privateKeyFile.Name(),
 		"-o", "StrictHostKeyChecking=no", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
-		"-p", "1234", "127.0.0.1",
+		"-p", "1234", "127.0.0.1", "date",
 	)
 
 	ssh.Run()
