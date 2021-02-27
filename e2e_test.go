@@ -283,6 +283,23 @@ func TestConnectionOpenUntilSuccessfullHandshake(t *testing.T) {
 	cmd.Kill()
 }
 
+func TestConnectionOpenUntilTimeout(t *testing.T) {
+	_, publicKeyFile, cleanup, err := generateKeyPair()
+	defer cleanup()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := testcli.Command("./otssh", "--authorized-keys", publicKeyFile.Name(), "--port", "1234", "--timeout", "1")
+	cmd.Start()
+
+	cmd.Wait()
+
+	expected := "Timeout: no connection established"
+	if !cmd.StdoutContains(expected) {
+		t.Fatalf("expected %q, got %q", expected, cmd.Stdout())
+	}
+}
+
 func TestNonInteractiveExec(t *testing.T) {
 	privateKeyFile, publicKeyFile, cleanup, err := generateKeyPair()
 	defer cleanup()

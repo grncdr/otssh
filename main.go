@@ -16,6 +16,7 @@ import (
 	"os/exec"
 	"sync"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"github.com/creack/pty"
@@ -37,6 +38,11 @@ func main() {
 				Value: 2022,
 				Usage: "Port to bind to",
 			},
+			&cli.IntFlag{
+				Name:  "timeout",
+				Value: 15,
+				Usage: "Timeout in seconds to wait for a connection",
+			},
 		},
 		Name:   "otssh",
 		Usage:  "make one time only SSH session",
@@ -54,6 +60,7 @@ func run(c *cli.Context) error {
 	log.Println("Started")
 	authKeysPath := c.String("authorized-keys")
 	port := c.Int("port")
+	timeout := c.Int("timeout")
 
 	// Create an io.Reader for the authorized-keys file from either stdin or the
 	// file path.
@@ -127,6 +134,11 @@ func run(c *cli.Context) error {
 	if err != nil {
 		return fmt.Errorf("Could not bind to port %d", port)
 	}
+	tcpListener := listener.(*net.TCPListener)
+	err = tcpListener.SetDeadline(time.Now().Add(time.Duration(timeout) * time.Second))
+	if err != nil {
+		return err
+	}
 
 	var (
 		conn  *ssh.ServerConn
@@ -136,8 +148,12 @@ func run(c *cli.Context) error {
 
 	for conn == nil {
 		nConn, err := listener.Accept()
-		defer listener.Close()
+		defer tcpListener.Close()
 		if err != nil {
+			if err.(*net.OpError).Timeout() {
+				fmt.Printf("Timeout: no connection established\n")
+				os.Exit(0)
+			}
 			return fmt.Errorf("Failed to accept incoming connection: %q", err)
 		}
 
