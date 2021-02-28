@@ -171,13 +171,12 @@ func TestUnknownPublicKey(t *testing.T) {
 	ssh := testcli.Command(
 		"ssh", "-T", "-i", privateKeyFile.Name(),
 		"-o", "StrictHostKeyChecking=no", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
-		"-p", "2022", "127.0.0.1",
+		"-p", "2022", "127.0.0.1", "date",
 	)
 
-	ssh.Start()
-	ssh.Wait()
+	ssh.Run()
 
-	cmd.Kill()
+	cmd.Wait()
 	expected := "Permission denied (publickey)"
 	if !ssh.StderrContains(expected) {
 		t.Fatalf("Expected %s, got %s", expected, ssh.Stdout())
