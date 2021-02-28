@@ -316,10 +316,14 @@ func TestNonInteractiveExec(t *testing.T) {
 		"-p", "1234", "127.0.0.1", "echo", "'hi you'",
 	)
 	ssh.Run()
-	cmd.Kill()
+	cmd.Wait()
 
 	expected := "hi you"
 	if !cmd.StdoutContains(expected) {
 		t.Fatalf("wanted %q, got %q", expected, cmd.Stderr())
+	}
+	notExpected := "Failed to execute"
+	if cmd.StdoutContains(notExpected) {
+		t.Fatalf("did not want %q, got %q", notExpected, cmd.Stdout())
 	}
 }

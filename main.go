@@ -14,6 +14,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -270,8 +271,8 @@ func run(c *cli.Context) error {
 					w, h := parseDims(req.Payload)
 					SetWinsize(ptyFd.Fd(), w, h)
 				case "exec":
-					command := string(req.Payload[4:])
-					shell := exec.Command(command)
+					command := strings.Fields(string(req.Payload[4:]))
+					shell := exec.Command(command[0], command[1:]...)
 					close := func() {
 						channel.Close()
 						log.Printf("Session closed")
