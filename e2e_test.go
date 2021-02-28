@@ -173,6 +173,7 @@ func TestUnknownPublicKey(t *testing.T) {
 		"-o", "StrictHostKeyChecking=no", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
 		"-p", "2022", "127.0.0.1", "date",
 	)
+
 	ssh.Run()
 
 	cmd.Wait()
@@ -345,13 +346,6 @@ func TestWritesToLogfile(t *testing.T) {
 	)
 	ssh.Run()
 	cmd.Wait()
-
-	fmt.Println("ssh output")
-	fmt.Println(ssh.Stdout())
-	fmt.Println(ssh.Stderr())
-	fmt.Println("cmd output")
-	fmt.Println(cmd.Stdout())
-	fmt.Println(cmd.Stderr())
 
 	expected := "== New session from"
 	b, err := ioutil.ReadFile("test_shell.log")
