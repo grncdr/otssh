@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"net"
 	"os"
+	"strings"
 	"testing"
 
 	"golang.org/x/crypto/ssh"
@@ -325,5 +326,39 @@ func TestNonInteractiveExec(t *testing.T) {
 	notExpected := "Failed to execute"
 	if cmd.StdoutContains(notExpected) {
 		t.Fatalf("did not want %q, got %q", notExpected, cmd.Stdout())
+	}
+}
+
+func TestWritesToLogfile(t *testing.T) {
+	privateKeyFile, publicKeyFile, cleanup, err := generateKeyPair()
+	defer cleanup()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := testcli.Command("./otssh", "--authorized-keys", publicKeyFile.Name(), "--port", "1234", "--log", "test_shell.log")
+	cmd.Start()
+	defer os.Remove("test_shell.log")
+
+	ssh := testcli.Command(
+		"ssh", "-i", privateKeyFile.Name(),
+		"-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
+		"-p", "1234", "127.0.0.1", "echo", "'hi you'",
+	)
+	ssh.Run()
+	cmd.Wait()
+
+	expected := "== New session from"
+	b, err := ioutil.ReadFile("test_shell.log")
+	if err != nil {
+		t.Fatalf("could not open log file: %q", err)
+	}
+	log := string(b)
+	if !strings.Contains(log, expected) {
+		t.Fatalf("expected %q, got %q", expected, log)
+	}
+	expected = "echo 'hi you'"
+	if !strings.Contains(log, expected) {
+		t.Fatalf("expected %q, got %q", expected, log)
 	}
 }

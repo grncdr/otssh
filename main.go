@@ -44,6 +44,10 @@ func main() {
 				Value: 15,
 				Usage: "Timeout in seconds to wait for a connection",
 			},
+			&cli.StringFlag{
+				Name:  "log",
+				Usage: "Filename to log transcript of session to",
+			},
 		},
 		Name:   "otssh",
 		Usage:  "make one time only SSH session",
@@ -62,6 +66,7 @@ func run(c *cli.Context) error {
 	authKeysPath := c.String("authorized-keys")
 	port := c.Int("port")
 	timeout := c.Int("timeout")
+	logFilename := c.String("log")
 
 	// Create an io.Reader for the authorized-keys file from either stdin or the
 	// file path.
@@ -194,6 +199,18 @@ func run(c *cli.Context) error {
 			envVars    []string = []string{}
 		)
 
+		logWriter := os.Stdout
+		if logFilename != "" {
+			logFile, err := os.OpenFile(logFilename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+			if err != nil {
+				return fmt.Errorf("Could not open log file: %q", err)
+			}
+			defer logFile.Close() // TODO: does this need error handling?
+			logWriter = logFile
+			log.Printf("Writing logs to %s\n", logFilename)
+			fmt.Fprintf(logWriter, "== New session from %s\n", conn.Conn.RemoteAddr().String())
+		}
+
 		// Sessions have out-of-band requests such as "shell",
 		// "pty-req" and "env".  Here we handle only the
 		// "shell" request.
@@ -222,7 +239,7 @@ func run(c *cli.Context) error {
 
 						var once sync.Once
 						go func() {
-							io.Copy(io.MultiWriter(channel, os.Stdout), fd)
+							io.Copy(io.MultiWriter(channel, logWriter), fd)
 							once.Do(close)
 						}()
 						go func() {
@@ -240,7 +257,7 @@ func run(c *cli.Context) error {
 							log.Printf("Session closed")
 						}
 
-						shell.Stdout = io.MultiWriter(channel, os.Stdout)
+						shell.Stdout = io.MultiWriter(channel, logWriter)
 						shell.Stdin = channel
 
 						err := shell.Start()
@@ -278,7 +295,10 @@ func run(c *cli.Context) error {
 						log.Printf("Session closed")
 					}
 
-					shell.Stdout = io.MultiWriter(channel, os.Stdout)
+					// Log command to be executed as this doesn't get automatically recorded
+					// like with an interactive session
+					fmt.Fprintf(logWriter, "$ %s\n", strings.Join(command, " "))
+					shell.Stdout = io.MultiWriter(channel, logWriter)
 					err = shell.Run()
 					if err != nil {
 						fmt.Printf("Failed to execute command: %s\n", err)
