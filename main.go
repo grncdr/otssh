@@ -48,6 +48,9 @@ func main() {
 				Name:  "log",
 				Usage: "Filename to log transcript of session to",
 			},
+			&cli.StringFlag{
+				Name: "announce",
+			},
 		},
 		Name:   "otssh",
 		Usage:  "make one time only SSH session",
@@ -67,6 +70,7 @@ func run(c *cli.Context) error {
 	port := c.Int("port")
 	timeout := c.Int("timeout")
 	logFilename := c.String("log")
+	announceCmd := c.String("announce")
 
 	// Create an io.Reader for the authorized-keys file from either stdin or the
 	// file path.
@@ -116,7 +120,7 @@ func run(c *cli.Context) error {
 		},
 	}
 
-	_, privateBytes, err := ed25519.GenerateKey(rand.Reader)
+	publicBytes, privateBytes, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		return fmt.Errorf("Failed to generate host key: %v", err)
 	}
@@ -132,6 +136,29 @@ func run(c *cli.Context) error {
 	}
 
 	config.AddHostKey(private)
+
+	public, err := ssh.NewPublicKey(publicBytes)
+	if err != nil {
+		return err
+	}
+
+	pubkeyBytes := ssh.MarshalAuthorizedKey(public)
+
+	fmt.Printf("Host public key: %s", string(pubkeyBytes))
+	fmt.Println("Add this to your known_hosts file.")
+
+	if announceCmd != "" {
+		announce := exec.Command(announceCmd, string(pubkeyBytes))
+		fmt.Printf("Executing announce command: %s\n", announceCmd)
+		announce.Stdout = os.Stdout
+		announce.Stderr = os.Stdout
+		err := announce.Run()
+		if err != nil {
+			fmt.Printf("Failed to execute announce command: %s", err) // should program bail if announce failed?
+		} else {
+			fmt.Println("Host key announced")
+		}
+	}
 
 	// Once a ServerConfig has been configured, connections can be
 	// accepted.

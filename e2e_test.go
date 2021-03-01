@@ -9,8 +9,10 @@ import (
 	"io/ioutil"
 	"net"
 	"os"
+	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"golang.org/x/crypto/ssh"
 
@@ -359,5 +361,28 @@ func TestWritesToLogfile(t *testing.T) {
 	expected = "echo 'hi you'"
 	if !strings.Contains(log, expected) {
 		t.Fatalf("expected %q, got %q", expected, log)
+	}
+}
+
+func TestAnnounce(t *testing.T) {
+	_, publicKeyFile, cleanup, err := generateKeyPair()
+	defer cleanup()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := testcli.Command("./otssh", "--authorized-keys", publicKeyFile.Name(), "--port", "1234", "--log", "test_shell.log", "--announce", "echo")
+	cmd.Start()
+	defer os.Remove("test_shell.log")
+
+	time.Sleep(1 * time.Second)
+	cmd.Kill()
+
+	re := regexp.MustCompile(`Host public key: (ssh-ed25519 [0-9A-Za-z_/+]+)Add`) // testcli badly joins lines without space
+	matched := re.FindStringSubmatch(cmd.Stdout())[1]
+
+	expected := fmt.Sprintf("echo%s", matched) // bug in testcli that removes newlines
+	if !cmd.StdoutContains(expected) {
+		t.Fatalf("wanted %q, got %q", expected, cmd.Stdout())
 	}
 }
