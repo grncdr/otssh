@@ -305,7 +305,7 @@ func run(c *cli.Context) error {
 					cols, rows := parseDims(req.Payload[termLen+4:])
 					width, height := parseDims(req.Payload[termLen+12:])
 
-					ptyWinSize = &pty.Winsize{uint16(cols), uint16(rows), uint16(width), uint16(height)}
+					ptyWinSize = &pty.Winsize{uint16(rows), uint16(cols), uint16(width), uint16(height)}
 					envVars = append(envVars, term)
 
 					// Responding true (OK) here will let the client
