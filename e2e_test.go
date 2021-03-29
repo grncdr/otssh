@@ -20,7 +20,7 @@ import (
 )
 
 func TestRaisesErrorForMissingAuthKeysFile(t *testing.T) {
-	testcli.Run("./otssh")
+	testcli.Run(t, "./otssh")
 	if testcli.Success() {
 		t.Fatalf("Expected error, but succeeded: %s", testcli.Stdout())
 	}
@@ -33,7 +33,7 @@ func TestRaisesErrorForMissingAuthKeysFile(t *testing.T) {
 func TestAuthorizedKeysDoesNotExist(t *testing.T) {
 	filename := "fake_file"
 
-	testcli.Run("./otssh", "--authorized-keys", filename)
+	testcli.Run(t, "./otssh", "--authorized-keys", filename)
 	expected := fmt.Sprintf("%s does not exist", filename)
 
 	if testcli.Success() {
@@ -64,7 +64,7 @@ func TestAuthorizedKeysNotReadable(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	testcli.Run("./otssh", "--authorized-keys", filename)
+	testcli.Run(t, "./otssh", "--authorized-keys", filename)
 	expected := fmt.Sprintf("%s is not readable", filename)
 
 	if testcli.Success() {
@@ -90,7 +90,7 @@ func TestAuthorizedKeysEmpty(t *testing.T) {
 		}
 	}()
 
-	testcli.Run("./otssh", "--authorized-keys", filename)
+	testcli.Run(t, "./otssh", "--authorized-keys", filename)
 	expected := fmt.Sprintf("%s contained no keys", filename)
 
 	if testcli.Success() {
@@ -164,13 +164,14 @@ func TestUnknownPublicKey(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cmd := testcli.Command("./otssh", "--authorized-keys", publicKeyFile.Name())
+	cmd := testcli.Command(t, "./otssh", "--authorized-keys", publicKeyFile.Name())
 	cmd.Start()
 	if err != nil {
 		t.Fatalf("failed to run command: %q\n", err)
 	}
 
 	ssh := testcli.Command(
+		t,
 		"ssh", "-T", "-i", privateKeyFile.Name(),
 		"-o", "StrictHostKeyChecking=no", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
 		"-p", "2022", "127.0.0.1", "date",
@@ -192,10 +193,11 @@ func TestBindsToPortArgument(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cmd := testcli.Command("./otssh", "--authorized-keys", publicKeyFile.Name(), "--port", "1234")
+	cmd := testcli.Command(t, "./otssh", "--authorized-keys", publicKeyFile.Name(), "--port", "1234")
 	cmd.Start()
 
 	ssh := testcli.Command(
+		t,
 		"ssh", "-T", "-i", privateKeyFile.Name(),
 		"-o", "StrictHostKeyChecking=no", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
 		"-p", "1234", "127.0.0.1", "date",
@@ -225,7 +227,7 @@ func TestCannotBindPort(t *testing.T) {
 
 	defer conn.Close()
 
-	testcli.Run("./otssh", "--authorized-keys", publicKeyFile.Name(), "--port", "1234")
+	testcli.Run(t, "./otssh", "--authorized-keys", publicKeyFile.Name(), "--port", "1234")
 	if !testcli.StderrContains("could not bind to port") {
 		t.Fatalf("expected could not bind to port, got %q", testcli.Stderr())
 	}
@@ -244,10 +246,10 @@ func TestConnectionOpenUntilSuccessfullHandshake(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cmd := testcli.Command("./otssh", "--authorized-keys", publicKeyFile.Name(), "--port", "1234")
+	cmd := testcli.Command(t, "./otssh", "--authorized-keys", publicKeyFile.Name(), "--port", "1234")
 	cmd.Start()
 
-	testcli.Run(
+	testcli.Run(t,
 		"ssh", "-T", "-i", badPrivateKeyFile.Name(),
 		"-o", "StrictHostKeyChecking=no", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
 		"-p", "1234", "127.0.0.1",
@@ -258,7 +260,7 @@ func TestConnectionOpenUntilSuccessfullHandshake(t *testing.T) {
 		t.Fatalf("expected %q, got %q", expected, cmd.Stderr())
 	}
 
-	ssh := testcli.Command(
+	ssh := testcli.Command(t,
 		"ssh", "-T", "-i", privateKeyFile.Name(),
 		"-o", "StrictHostKeyChecking=no", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
 		"-p", "1234", "127.0.0.1", "date",
@@ -272,7 +274,7 @@ func TestConnectionOpenUntilSuccessfullHandshake(t *testing.T) {
 	}
 
 	// After accepting a connection all other connections should be refused
-	connectionDenied := testcli.Command(
+	connectionDenied := testcli.Command(t,
 		"ssh", "-T", "-i", badPrivateKeyFile.Name(),
 		"-o", "StrictHostKeyChecking=no", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
 		"-p", "1234", "127.0.0.1",
@@ -291,7 +293,7 @@ func TestConnectionOpenUntilTimeout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cmd := testcli.Command("./otssh", "--authorized-keys", publicKeyFile.Name(), "--port", "1234", "--timeout", "1")
+	cmd := testcli.Command(t, "./otssh", "--authorized-keys", publicKeyFile.Name(), "--port", "1234", "--timeout", "1")
 	cmd.Start()
 
 	cmd.Wait()
@@ -309,10 +311,10 @@ func TestNonInteractiveExec(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cmd := testcli.Command("./otssh", "--authorized-keys", publicKeyFile.Name(), "--port", "1234")
+	cmd := testcli.Command(t, "./otssh", "--authorized-keys", publicKeyFile.Name(), "--port", "1234")
 	cmd.Start()
 
-	ssh := testcli.Command(
+	ssh := testcli.Command(t,
 		"ssh", "-i", privateKeyFile.Name(),
 		"-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
 		"-p", "1234", "127.0.0.1", "echo", "'hi you'",
@@ -337,11 +339,12 @@ func TestWritesToLogfile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cmd := testcli.Command("./otssh", "--authorized-keys", publicKeyFile.Name(), "--port", "1234", "--log", "test_shell.log")
+	cmd := testcli.Command(t, "./otssh", "--authorized-keys", publicKeyFile.Name(), "--port", "1234", "--log", "test_shell.log")
 	cmd.Start()
 	defer os.Remove("test_shell.log")
 
 	ssh := testcli.Command(
+		t,
 		"ssh", "-i", privateKeyFile.Name(),
 		"-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
 		"-p", "1234", "127.0.0.1", "echo", "'hi you'",
@@ -371,17 +374,17 @@ func TestAnnounce(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cmd := testcli.Command("./otssh", "--authorized-keys", publicKeyFile.Name(), "--port", "1234", "--log", "test_shell.log", "--announce", "echo")
+	cmd := testcli.Command(t, "./otssh", "--authorized-keys", publicKeyFile.Name(), "--port", "1234", "--log", "test_shell.log", "--announce", "echo")
 	cmd.Start()
 	defer os.Remove("test_shell.log")
 
 	time.Sleep(1 * time.Second)
 	cmd.Kill()
 
-	re := regexp.MustCompile(`Host public key: (ssh-ed25519 [0-9A-Za-z_/+]+)Add`) // testcli badly joins lines without space
+	re := regexp.MustCompile(`Host public key: (ssh-ed25519 [0-9A-Za-z_/+]+)\nAdd`) // testcli badly joins lines without space
 	matched := re.FindStringSubmatch(cmd.Stdout())[1]
 
-	expected := fmt.Sprintf("echo%s", matched) // bug in testcli that removes newlines
+	expected := fmt.Sprintf("echo\n%s", matched) // bug in testcli that removes newlines
 	if !cmd.StdoutContains(expected) {
 		t.Fatalf("wanted %q, got %q", expected, cmd.Stdout())
 	}

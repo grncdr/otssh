@@ -7,6 +7,8 @@ github.com/gerbyzation/testcli v1.0.1-0.20210218221035-63044a7d8a0e h1:PLVLKJzCi
 github.com/gerbyzation/testcli v1.0.1-0.20210218221035-63044a7d8a0e/go.mod h1:ybKNrK9+WLgOvYv+S7bi3i2dUaMYMUhp7rgTGWTHvCo=
 github.com/gerbyzation/testcli v1.0.1-0.20210220214903-456fb395b157 h1:5QEgwwRv+IbPOKqOAiA1yWoUdAcUtPMvvtFs/+I46NQ=
 github.com/gerbyzation/testcli v1.0.1-0.20210220214903-456fb395b157/go.mod h1:ybKNrK9+WLgOvYv+S7bi3i2dUaMYMUhp7rgTGWTHvCo=
+github.com/gerbyzation/testcli v1.0.1-0.20210329201832-4e415f951551 h1:lbPgfDjgJUJml0sLdIZitcUWTESFqJEcGXS4F+UZmuo=
+github.com/gerbyzation/testcli v1.0.1-0.20210329201832-4e415f951551/go.mod h1:ybKNrK9+WLgOvYv+S7bi3i2dUaMYMUhp7rgTGWTHvCo=
 github.com/mikesmitty/edkey v0.0.0-20170222072505-3356ea4e686a h1:eU8j/ClY2Ty3qdHnn0TyW3ivFoPC/0F1gQZz8yTxbbE=
 github.com/mikesmitty/edkey v0.0.0-20170222072505-3356ea4e686a/go.mod h1:v8eSC2SMp9/7FTKUncp7fH9IwPfw+ysMObcEz5FWheQ=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
