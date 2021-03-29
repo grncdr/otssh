@@ -173,7 +173,7 @@ func TestUnknownPublicKey(t *testing.T) {
 	ssh := testcli.Command(
 		t,
 		"ssh", "-T", "-i", privateKeyFile.Name(),
-		"-o", "StrictHostKeyChecking=no", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
+		"-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
 		"-p", "2022", "127.0.0.1", "date",
 	)
 
@@ -199,7 +199,7 @@ func TestBindsToPortArgument(t *testing.T) {
 	ssh := testcli.Command(
 		t,
 		"ssh", "-T", "-i", privateKeyFile.Name(),
-		"-o", "StrictHostKeyChecking=no", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
+		"-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
 		"-p", "1234", "127.0.0.1", "date",
 	)
 
@@ -251,7 +251,7 @@ func TestConnectionOpenUntilSuccessfullHandshake(t *testing.T) {
 
 	testcli.Run(t,
 		"ssh", "-T", "-i", badPrivateKeyFile.Name(),
-		"-o", "StrictHostKeyChecking=no", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
+		"-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
 		"-p", "1234", "127.0.0.1",
 	)
 
@@ -262,7 +262,7 @@ func TestConnectionOpenUntilSuccessfullHandshake(t *testing.T) {
 
 	ssh := testcli.Command(t,
 		"ssh", "-T", "-i", privateKeyFile.Name(),
-		"-o", "StrictHostKeyChecking=no", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
+		"-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
 		"-p", "1234", "127.0.0.1", "date",
 	)
 
@@ -276,7 +276,7 @@ func TestConnectionOpenUntilSuccessfullHandshake(t *testing.T) {
 	// After accepting a connection all other connections should be refused
 	connectionDenied := testcli.Command(t,
 		"ssh", "-T", "-i", badPrivateKeyFile.Name(),
-		"-o", "StrictHostKeyChecking=no", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
+		"-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
 		"-p", "1234", "127.0.0.1",
 	)
 	connectionDenied.Run()
