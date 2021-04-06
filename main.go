@@ -164,6 +164,8 @@ func run(c *cli.Context) error {
 	// accepted.
 	address := fmt.Sprintf("0.0.0.0:%d", port)
 	listener, err := net.Listen("tcp", address)
+
+
 	if err != nil {
 		return fmt.Errorf("Could not bind to port %d", port)
 	}
@@ -181,7 +183,6 @@ func run(c *cli.Context) error {
 
 	for conn == nil {
 		nConn, err := listener.Accept()
-		defer tcpListener.Close()
 		if err != nil {
 			if err.(*net.OpError).Timeout() {
 				fmt.Printf("Timeout: no connection established\n")

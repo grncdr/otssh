@@ -12,11 +12,10 @@ import (
 	"regexp"
 	"strings"
 	"testing"
-	"time"
 
 	"golang.org/x/crypto/ssh"
 
-	"github.com/gerbyzation/testcli"
+	"github.com/rendon/testcli"
 )
 
 func TestRaisesErrorForMissingAuthKeysFile(t *testing.T) {
@@ -166,8 +165,9 @@ func TestUnknownPublicKey(t *testing.T) {
 
 	cmd := testcli.Command(t, "./otssh", "--authorized-keys", publicKeyFile.Name())
 	cmd.Start()
-	if err != nil {
-		t.Fatalf("failed to run command: %q\n", err)
+
+	if !cmd.StdoutContains("Add this to your known_hosts file.") {
+		t.Errorf("expected Add this to your known_hosts file., got %q", cmd.Stdout())
 	}
 
 	ssh := testcli.Command(
@@ -195,6 +195,11 @@ func TestBindsToPortArgument(t *testing.T) {
 
 	cmd := testcli.Command(t, "./otssh", "--authorized-keys", publicKeyFile.Name(), "--port", "1234")
 	cmd.Start()
+	defer cmd.Kill()
+
+	if !cmd.StdoutContains("Add this to your known_hosts file.") {
+		t.Errorf("expected Add this to your known_hosts file., got %q", cmd.Stdout())
+	}
 
 	ssh := testcli.Command(
 		t,
@@ -204,7 +209,6 @@ func TestBindsToPortArgument(t *testing.T) {
 	)
 
 	ssh.Run()
-	cmd.Kill()
 
 	expected := "logged in with key"
 	// This should be on stdout, not stderr?
@@ -248,6 +252,11 @@ func TestConnectionOpenUntilSuccessfullHandshake(t *testing.T) {
 
 	cmd := testcli.Command(t, "./otssh", "--authorized-keys", publicKeyFile.Name(), "--port", "1234")
 	cmd.Start()
+	defer cmd.Kill()
+
+	if !cmd.StdoutContains("Add this to your known_hosts file.") {
+		t.Errorf("expected Add this to your known_hosts file., got %q", cmd.Stdout())
+	}
 
 	testcli.Run(t,
 		"ssh", "-T", "-i", badPrivateKeyFile.Name(),
@@ -284,7 +293,6 @@ func TestConnectionOpenUntilSuccessfullHandshake(t *testing.T) {
 	if !connectionDenied.StderrContains(expected) {
 		t.Fatalf("exptected %q, got %q", expected, connectionDenied.Stderr())
 	}
-	cmd.Kill()
 }
 
 func TestConnectionOpenUntilTimeout(t *testing.T) {
@@ -314,6 +322,10 @@ func TestNonInteractiveExec(t *testing.T) {
 	cmd := testcli.Command(t, "./otssh", "--authorized-keys", publicKeyFile.Name(), "--port", "1234")
 	cmd.Start()
 
+	if !cmd.StdoutContains("Add this to your known_hosts file.") {
+		t.Errorf("expected Add this to your known_hosts file., got %q", cmd.Stdout())
+	}
+
 	ssh := testcli.Command(t,
 		"ssh", "-i", privateKeyFile.Name(),
 		"-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
@@ -342,6 +354,10 @@ func TestWritesToLogfile(t *testing.T) {
 	cmd := testcli.Command(t, "./otssh", "--authorized-keys", publicKeyFile.Name(), "--port", "1234", "--log", "test_shell.log")
 	cmd.Start()
 	defer os.Remove("test_shell.log")
+
+	if !cmd.StdoutContains("Add this to your known_hosts file.") {
+		t.Errorf("expected Add this to your known_hosts file., got %q", cmd.Stdout())
+	}
 
 	ssh := testcli.Command(
 		t,
@@ -376,10 +392,12 @@ func TestAnnounce(t *testing.T) {
 
 	cmd := testcli.Command(t, "./otssh", "--authorized-keys", publicKeyFile.Name(), "--port", "1234", "--log", "test_shell.log", "--announce", "echo")
 	cmd.Start()
+	defer cmd.Kill()
 	defer os.Remove("test_shell.log")
 
-	time.Sleep(1 * time.Second)
-	cmd.Kill()
+	if !cmd.StdoutContains("Add this to your known_hosts file.") {
+		t.Errorf("expected Add this to your known_hosts file., got %q", cmd.Stdout())
+	}
 
 	re := regexp.MustCompile(`Host public key: (ssh-ed25519 [0-9A-Za-z_/+]+)\nAdd`) // testcli badly joins lines without space
 	matched := re.FindStringSubmatch(cmd.Stdout())[1]
