@@ -370,14 +370,6 @@ func parseDims(b []byte) (uint32, uint32) {
 	return w, h
 }
 
-// Winsize stores the Height and Width of a terminal.
-// type Winsize struct {
-// 	Height uint16
-// 	Width  uint16
-// 	x      uint16 // unused
-// 	y      uint16 // unused
-// }
-
 // SetWinsize sets the size of the given pty.
 func SetWinsize(fd uintptr, w, h uint32) {
 	ws := &pty.Winsize{Cols: uint16(w), Rows: uint16(h)}
